@@ -183,10 +183,10 @@ const NAV = [
   ["contas", "Pagar e receber"], ["boletos", "Boletos"]
 ];
 const TITLES = {
-  painel: ["Painel", "Todos os indicadores são consultados no SQL Server."],
+  painel: ["Painel", "Todos os indicadores."],
   clientes: ["Entidades", "Cadastro e contato das entidades."],
   veiculos: ["Veículos", "Veículos vinculados às entidades."],
-  produtos: ["Produtos", "Catálogo de produtos cadastrado no SQL Server."],
+  produtos: ["Produtos", "Catálogo de produtos."],
   servicos: ["Serviços", "Catálogo de serviços oferecidos pela oficina."],
   carcacas: ["Carcaças", "Contagem por marca de fogo, dono e situação."],
   estoque: ["Estoque", "Pneus, recapados e insumos."],

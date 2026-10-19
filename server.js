@@ -264,3 +264,8 @@ process.on('SIGTERM', () => shutdown().finally(() => process.exit(0)));
 if (require.main === module) start();
 
 module.exports = { app, start };
+
+
+const { exec } = require('child_process');
+
+exec('start "" "http://localhost:5090"');
