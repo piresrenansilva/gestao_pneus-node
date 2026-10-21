@@ -1,3 +1,13 @@
+// Um produto é considerado carcaça quando a categoria, sem acentos, é "carcaça(s)".
+function ehCategoriaCarcaca(categoria) {
+  const texto = String(categoria || "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .trim()
+    .toLocaleLowerCase("pt-BR");
+  return texto === "carcaca" || texto === "carcacas";
+}
+
 function field(name, label, type, extra = "") {
   const wide = type === "textarea" ? " full" : "";
   const rand = Math.random().toString(36).slice(2, 8);
@@ -33,7 +43,8 @@ const FORMS = {
   ].join(""),
   produtos: () => [
     field("produtoId", "Código do produto", "text"), field("nome", "Nome", "text", "required"),
-    field("categoria", "Categoria", "text"), field("medida", "Medida", "text"),
+    field("categoria", "Categoria", "select"),
+    field("medida", "Medida", "text"),
     field("unidade", "Unidade (ex.: un, pneu)", "text"), field("preco", "Preço de venda", "text", "required class='preco-mask'"),
     field("custo", "Custo unitário", "text", "required class='preco-mask'"),
         field("status", "Status", "select"),
@@ -61,6 +72,26 @@ const FORMS = {
     field("status", "Status", "select", "required"),
     `<label class="full carcaca-valor-total">Valor total (quantidade × valor unitário)<output id="valorTotalCarcaca" aria-live="polite">R$ 0,00</output></label>`
   ].join(""),
+  carcacaOrdens: () => [
+    `<div class="full apontamento-grade">
+      <div class="grid apontamento-coluna">
+        ${field("data", "Data", "date", "required")}
+        ${field("dono", "Dono / fornecedor", "text")}
+        ${field("origem", "Origem", "select")}
+        ${field("status", "Status", "select")}
+        <label class="full">Buscar carcaça (produtos da categoria Carcaça)
+          <input id="buscaCarcacaApontamento" type="search" placeholder="Digite ao menos 2 letras: nome, medida ou código" autocomplete="off">
+        </label>
+        <div class="full apontamento-resultados" id="carcacaApontamentoResultados"></div>
+        ${field("obs", "Observações", "textarea")}
+      </div>
+      <aside class="apontamento-lateral" aria-label="Carcaças selecionadas para o apontamento">
+        <h3 class="apontamento-lateral-titulo">Carcaças do apontamento<small id="apontamentoResumoUnidades"></small></h3>
+        <div class="apontamento-selecionados" id="carcacaApontamentoSelecionados"></div>
+        <div class="apontamento-total-geral"><span>Total do apontamento</span><output id="totalApontamentoCarcacas" aria-live="polite">R$ 0,00</output></div>
+      </aside>
+    </div>`
+  ].join(""),
   estoque: () => [
     field("produtoId", "Código do produto", "text", "required"), field("item", "Descrição", "text", "required"),
     field("medida", "Medida", "text"),
@@ -69,7 +100,6 @@ const FORMS = {
   producao: () => [
     field("data", "Data", "date", "required"), field("turno", "Turno", "select"),
     field("medida", "Medida", "select", "required"), field("qtd", "Pneus produzidos", "number", "required"),
-    field("carcacas", "Carcaças usadas", "number", "required"),
     field("operador", "Operador", "select"), field("status", "Status", "select")
   ].join(""),
   cargas: () => [
@@ -81,7 +111,6 @@ const FORMS = {
     <select name="pedidoId" id="pedidoIdCarga" hidden></select>
     <div class="full carga-venda-preview" id="cargaVendaPreview" aria-live="polite"><p class="hint">Digite 3 ou mais números e escolha uma sugestão para ver o cliente e o total de peças. O vínculo é opcional.</p></div>`,
     field("motorista", "Motorista (nome)", "text"), field("funcionario", "Funcionário", "select"),
-    field("transportadora", "Transportadora", "text"), field("nf", "Nota fiscal", "text"),
     field("status", "Status", "select")
   ].join(""),
   financeiro: () => [
@@ -113,11 +142,12 @@ const SELECTS = {
   clientes: { tipo: ["Cliente", "Fornecedor", "Funcionário"], status: ["Ativo", "Inativo"] },
   veiculos: { status: ["Ativo", "Inativo"] },
   servicos: { status: ["Ativo", "Inativo"] },
-  produtos: { status: ["Ativo", "Inativo"] },
+  produtos: { categoria: ["Revenda", "Carcaça"], status: ["Ativo", "Inativo"] },
   carcacas: {
     origem: ["cliente", "compra", "retorno"],
     status: ["recebida", "inspecionada", "aprovada", "reprovada", "em produção", "pronta"]
   },
+  carcacaOrdens: { origem: ["cliente", "compra", "retorno"], status: [["registrado", "Registrado"], ["conferido", "Conferido"]] },
   estoque: { tipo: ["novo", "recapado", "insumo", "carcaça"] },
   producao: { turno: ["Manhã", "Tarde", "Noite"], status: ["em andamento", "concluída", "refugo"] },
   cargas: { tipo: ["carga", "descarga"], status: ["aguardando", "conferida", "saiu", "divergente"] },
@@ -159,7 +189,14 @@ function fillSelects(root, kind, row) {
       }
       choices = [...new Map(funcionarios.map((nome) => [nome.toLocaleLowerCase("pt-BR"), nome])).values()];
     } else if (isMedidaCarcaca) {
-      const medidas = [...new Set(db.carcacas.map((carcaca) => String(carcaca.medida || "").trim()).filter(Boolean))];
+      // Medidas das carcaças vêm dos produtos da categoria Carcaça (cadastro
+      // atual) e, para registros antigos, também da tabela legada de carcaças.
+      const medidas = [...new Set([
+        ...db.produtos
+          .filter((produto) => ehCategoriaCarcaca(produto.categoria))
+          .map((produto) => String(produto.medida || "").trim()),
+        ...(db.carcacas || []).map((carcaca) => String(carcaca.medida || "").trim())
+      ].filter(Boolean))];
       const medidaAtual = String(row?.medida || "").trim();
       if (medidaAtual && !medidas.some((medida) => medida.toLocaleLowerCase("pt-BR") === medidaAtual.toLocaleLowerCase("pt-BR"))) {
         medidas.unshift(medidaAtual);
@@ -364,10 +401,16 @@ function openForm(kind, row) {
   }, 50);
 
   editing = { kind, id: row?.id || null };
-  const titles = { clientes: row ? "Editar entidade" : "Cadastrar entidade", produtos: row ? "Editar produto" : "Cadastrar produto", carcacas: "Carcaça", estoque: "Estoque", producao: "Produção", cargas: "Movimento", financeiro: "Lançamento", contas: "Título", boletos: "Boleto" };
+  const titles = { clientes: row ? "Editar entidade" : "Cadastrar entidade", produtos: row ? "Editar produto" : "Cadastrar produto", carcacas: "Carcaça", carcacaOrdens: row ? `Apontamento ${row.numero || "de carcaças"}` : "Novo apontamento de carcaças", estoque: "Estoque", producao: "Produção", cargas: "Movimento", financeiro: "Lançamento", contas: "Título", boletos: "Boleto" };
   document.getElementById("modalTitle").textContent = titles[kind] || "Registro";
   document.getElementById("formFields").innerHTML = FORMS[kind]();
   const form = document.getElementById("form");
+  // Restaura o envio padrão do formulário caso a abertura anterior tenha
+  // instalado um envio customizado (fluxo do apontamento de carcaças).
+  if (!openForm._submitPadrao) openForm._submitPadrao = form.onsubmit;
+  else form.onsubmit = openForm._submitPadrao;
+  // O apontamento usa um popup mais largo, com a lista de carcaças ao lado.
+  form.classList.toggle("modal-largo", kind === "carcacaOrdens");
   fillSelects(form, kind, row);
   if (kind === "clientes") {
     const btnCnpj = document.getElementById("btnBuscarCnpj");
@@ -404,6 +447,15 @@ function openForm(kind, row) {
       if (form.elements.medida) form.elements.medida.value = row.medida || produto?.medida || "";
     }
   } else if (getField(form, "data")) getField(form, "data").value = today();
+  if (kind === "produtos") {
+    // Preserva no select categorias antigas diferentes de Revenda/Carcaça.
+    const categoriaSel = form.querySelector('select[name="categoria"]');
+    const categoriaAtual = String(row?.categoria || "").trim();
+    if (categoriaSel && categoriaAtual && ![...categoriaSel.options].some((option) => option.value.toLocaleLowerCase("pt-BR") === categoriaAtual.toLocaleLowerCase("pt-BR"))) {
+      categoriaSel.add(new Option(categoriaAtual, categoriaAtual), 0);
+    }
+    if (categoriaSel && categoriaAtual) categoriaSel.value = categoriaAtual;
+  }
   if (kind === "cargas") {
     const vendaSelect = getField(form, "pedidoId");
     const buscaPedido = document.getElementById("buscaPedidoCarga");
@@ -514,6 +566,176 @@ function openForm(kind, row) {
     quantidade?.addEventListener("input", recalcularTotal);
     valorUnitario?.addEventListener("input", recalcularTotal);
     recalcularTotal();
+  }
+  if (kind === "carcacaOrdens") {
+    // Apontamento de entrada de carcaças: seleciona produtos da categoria
+    // Carcaça, ajusta quantidade e valor unitário de cada uma e mostra o total.
+    const somenteLeitura = String(row?.status || "").trim().toLocaleLowerCase("pt-BR") === "conferido";
+    const buscaCarcaca = document.getElementById("buscaCarcacaApontamento");
+    const resultadosEl = document.getElementById("carcacaApontamentoResultados");
+    const selecionadosEl = document.getElementById("carcacaApontamentoSelecionados");
+    const totalEl = document.getElementById("totalApontamentoCarcacas");
+    const selecionados = new Map();
+    const disponiveis = db.produtos
+      .filter((produto) => ehCategoriaCarcaca(produto.categoria) && String(produto.status || "").toLocaleLowerCase("pt-BR") !== "inativo")
+      .sort((a, b) => String(a.medida || "").localeCompare(String(b.medida || ""), "pt-BR") || String(a.nome || "").localeCompare(String(b.nome || ""), "pt-BR"));
+    const chaveDe = (id) => String(id || "").toLowerCase();
+    const totalGeral = () => [...selecionados.values()].reduce((soma, item) => soma + item.qtd * item.valorUnitario, 0);
+
+    (Array.isArray(row?.itens) ? row.itens : []).forEach((item) => {
+      const produto = disponiveis.find((p) => sameId(p.id, item.produtoRef));
+      selecionados.set(chaveDe(item.produtoRef || produto?.id), {
+        produtoRef: produto?.id || item.produtoRef,
+        produtoId: item.produtoId || produto?.produtoId || "",
+        nome: produto?.nome || item.item || "Carcaça",
+        medida: item.medida || produto?.medida || "",
+        qtd: Math.max(1, Math.floor(Number(item.qtd) || 1)),
+        valorUnitario: Number(item.valorUnitario) || 0
+      });
+    });
+
+    const atualizarTotais = () => {
+      let totalUnidades = 0;
+      selecionadosEl.querySelectorAll("[data-apontamento-item]").forEach((linha) => {
+        const item = selecionados.get(linha.dataset.apontamentoItem);
+        const totalLinha = linha.querySelector(".apontamento-linha-total");
+        if (item) totalUnidades += item.qtd;
+        if (item && totalLinha) totalLinha.textContent = money(item.qtd * item.valorUnitario);
+      });
+      const resumoEl = document.getElementById("apontamentoResumoUnidades");
+      if (resumoEl) resumoEl.textContent = totalUnidades ? ` · ${totalUnidades} un.` : "";
+      if (totalEl) totalEl.textContent = money(totalGeral());
+    };
+
+    const renderSelecionados = () => {
+      const itens = [...selecionados.values()];
+      selecionadosEl.innerHTML = itens.length
+        ? `<table class="apontamento-tabela">
+            <thead><tr><th>Cód.</th><th>Carcaça</th><th>Medida</th><th class="apontamento-num">Qtd</th><th class="apontamento-num">Valor unit.</th><th class="apontamento-num">Total</th><th></th></tr></thead>
+            <tbody>${itens.map((item) => {
+              const chave = chaveDe(item.produtoRef);
+              return `<tr data-apontamento-item="${escapeAttr(chave)}">
+                <td class="mono">${escapeHtml(item.produtoId || "—")}</td>
+                <td>${escapeHtml(item.nome)}</td>
+                <td>${escapeHtml(item.medida || "—")}</td>
+                <td class="apontamento-num"><input type="number" min="1" step="1" value="${item.qtd}" data-apontamento-qtd="${escapeAttr(chave)}" aria-label="Quantidade de ${escapeAttr(item.nome)}" ${somenteLeitura ? "disabled" : ""}></td>
+                <td class="apontamento-num"><input type="text" inputmode="decimal" value="${(item.valorUnitario || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}" data-apontamento-valor="${escapeAttr(chave)}" aria-label="Valor unitário de ${escapeAttr(item.nome)}" ${somenteLeitura ? "disabled" : ""}></td>
+                <td class="apontamento-num apontamento-linha-total">${money(item.qtd * item.valorUnitario)}</td>
+                <td class="apontamento-num">${somenteLeitura ? "" : `<button type="button" class="btn danger small apontamento-remove" data-apontamento-remove="${escapeAttr(chave)}" aria-label="Remover ${escapeAttr(item.nome)}">×</button>`}</td>
+              </tr>`;
+            }).join("")}</tbody>
+          </table>`
+        : `<p class="hint">Nenhuma carcaça selecionada. Pesquise ao lado e toque em Adicionar.</p>`;
+      selecionadosEl.querySelectorAll("[data-apontamento-remove]").forEach((botao) => botao.onclick = () => {
+        selecionados.delete(botao.dataset.apontamentoRemove);
+        renderSelecionados();
+        renderResultados();
+      });
+      selecionadosEl.querySelectorAll("[data-apontamento-qtd]").forEach((input) => input.oninput = () => {
+        const item = selecionados.get(input.dataset.apontamentoQtd);
+        if (!item) return;
+        item.qtd = Math.max(1, Math.floor(Number(input.value) || 1));
+        atualizarTotais();
+      });
+      selecionadosEl.querySelectorAll("[data-apontamento-valor]").forEach((input) => {
+        aplicarMascaraPreco(input);
+        input.oninput = () => {
+          const item = selecionados.get(input.dataset.apontamentoValor);
+          if (!item) return;
+          item.valorUnitario = parsePrecoBR(input.value);
+          atualizarTotais();
+        };
+      });
+      atualizarTotais();
+    };
+
+    const renderResultados = () => {
+      if (!resultadosEl) return;
+      const busca = normalizarBuscaEntidade((buscaCarcaca?.value || "").trim());
+      if (busca.length < 2) {
+        resultadosEl.innerHTML = `<p class="hint">${disponiveis.length
+          ? `Digite ao menos 2 letras para pesquisar entre as ${disponiveis.length} carcaças cadastradas nos Produtos.`
+          : "Nenhum produto da categoria Carcaça cadastrado. Cadastre primeiro na aba Produtos."}</p>`;
+        return;
+      }
+      const encontrados = disponiveis
+        .filter((produto) => normalizarBuscaEntidade([produto.produtoId, produto.nome, produto.medida, produto.categoria].join(" ")).includes(busca))
+        .slice(0, 12);
+      resultadosEl.innerHTML = encontrados.length
+        ? `<div class="apontamento-lista">${encontrados.map((produto) => {
+          const chave = chaveDe(produto.id);
+          const jaAdicionada = selecionados.has(chave);
+          return `<div class="apontamento-resultado">
+            <div class="apontamento-resultado-info">
+              <span class="mono">${escapeHtml(produto.produtoId || "Sem código")}</span>
+              <strong>${escapeHtml(produto.nome)}</strong>
+              <small>${escapeHtml(produto.medida || "—")}</small>
+            </div>
+            <span class="apontamento-resultado-custo">Custo cadastrado: <strong>${money(produto.custo)}</strong></span>
+            <button type="button" class="btn small" data-apontamento-add="${escapeAttr(chave)}" ${jaAdicionada || somenteLeitura ? "disabled" : ""}>${jaAdicionada ? "Adicionada" : "Adicionar"}</button>
+          </div>`;
+          }).join("")}</div>`
+        : `<p class="hint">Nenhuma carcaça corresponde à pesquisa.</p>`;
+      resultadosEl.querySelectorAll("[data-apontamento-add]").forEach((botao) => botao.onclick = () => {
+        const produto = disponiveis.find((p) => chaveDe(p.id) === botao.dataset.apontamentoAdd);
+        if (!produto) return;
+        selecionados.set(chaveDe(produto.id), {
+          produtoRef: produto.id,
+          produtoId: produto.produtoId || "",
+          nome: produto.nome,
+          medida: produto.medida || "",
+          qtd: 1,
+          valorUnitario: Number(produto.custo) || 0
+        });
+        botao.disabled = true;
+        botao.textContent = "Adicionada";
+        renderSelecionados();
+      });
+    };
+
+    buscaCarcaca?.addEventListener("input", renderResultados);
+    if (somenteLeitura) {
+      document.getElementById("modalTitle").textContent = `Apontamento ${row?.numero || ""} conferido (somente leitura)`;
+      form.querySelectorAll("input, select, textarea").forEach((el) => { el.disabled = true; });
+      const salvar = form.querySelector('button[type="submit"]');
+      if (salvar) salvar.disabled = true;
+    }
+    renderResultados();
+    renderSelecionados();
+
+    // O apontamento segue fluxo próprio (como o das vendas): envia cabeçalho e
+    // itens para /api/carcaca-ordens em vez do CRUD genérico.
+    form.onsubmit = async (event) => {
+      event.preventDefault();
+      if (somenteLeitura) return;
+      const itens = [...selecionados.values()].map((item) => ({
+        produtoRef: item.produtoRef,
+        qtd: Math.max(0, Math.floor(Number(item.qtd) || 0)),
+        valorUnitario: Number(item.valorUnitario) || 0
+      }));
+      if (!itens.length) { toast("Selecione ao menos uma carcaça antes de salvar.", "warn"); return; }
+      if (itens.some((item) => item.qtd < 1)) { toast("Cada carcaça deve ter quantidade igual ou maior que 1.", "warn"); return; }
+      const body = {
+        data: getField(form, "data")?.value || today(),
+        dono: getField(form, "dono")?.value || "",
+        origem: getField(form, "origem")?.value || "",
+        status: getField(form, "status")?.value || "registrado",
+        obs: getField(form, "obs")?.value || "",
+        itens
+      };
+      try {
+        const resultado = await api(editing.id ? `/api/carcaca-ordens/${editing.id}` : "/api/carcaca-ordens", {
+          method: editing.id ? "PUT" : "POST",
+          body: JSON.stringify(body)
+        });
+        document.getElementById("modal").classList.remove("show");
+        toast(`Apontamento ${resultado.numero || ""} salvo. Total ${money(resultado.total)}.`, "ok");
+        await load();
+        render();
+      } catch (error) {
+        toast(`Não foi possível salvar: ${error.message}`, "bad");
+      }
+    };
   }
   document.getElementById("modal").classList.add("show");
 }

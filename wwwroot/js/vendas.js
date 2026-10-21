@@ -81,7 +81,10 @@ function estoqueLocal(produto) {
 }
 
 function produtoEhPneu(produto) {
-  return !["serviço", "servicos", "serviço"].includes(String(produto.categoria || "").trim().toLocaleLowerCase("pt-BR"));
+  const categoria = String(produto.categoria || "").trim().toLocaleLowerCase("pt-BR");
+  // Carcaças são cadastradas como produto, mas não podem ser vendidas: entram
+  // nos apontamentos de entrada (aba Carcaças), não no catálogo da venda.
+  return !["serviço", "servicos", "serviços", "carcaça", "carcaca", "carcaças", "carcacas"].includes(categoria);
 }
 
 function subtotalPorTipo(tipo) {
@@ -234,20 +237,32 @@ function produtoVendaCardMarkup(produto) {
 }
 
 function produtosEtapaMarkup() {
+  const MIN_CARACTERES_BUSCA = 2;
   const catalogo = db.produtos.filter((produto) => produtoEhPneu(produto) && String(produto.status || "").toLowerCase() !== "inativo");
   const termo = String(vendaRascunho.buscaProduto || "");
   const busca = normalizarBuscaEntidade(termo.trim());
-  const produtos = catalogo.filter((produto) => !busca || normalizarBuscaEntidade([
-    produto.produtoId, produto.nome, produto.categoria, produto.medida
-  ].join(" ")).includes(busca));
+  const buscaAtiva = busca.length >= MIN_CARACTERES_BUSCA;
+  // Sem pesquisa, o catálogo não é exibido. Apenas os pneus já incluídos no
+  // pedido permanecem visíveis, para permitir ajustar ou remover a quantidade.
+  const produtos = buscaAtiva
+    ? catalogo.filter((produto) => normalizarBuscaEntidade([
+      produto.produtoId, produto.nome, produto.categoria, produto.medida
+    ].join(" ")).includes(busca))
+    : catalogo.filter((produto) => vendaRascunho.itens.some((item) => item.tipo === "pneu" && item.referencia === produto.id));
   const quantidadeSelecionada = vendaRascunho.itens.filter((item) => item.tipo === "pneu").reduce((soma, item) => soma + item.qtd, 0);
+  const contagem = buscaAtiva ? `${produtos.length} de ${catalogo.length} produtos` : `${catalogo.length} produtos no catálogo`;
+  const vazio = buscaAtiva
+    ? "Nenhum produto corresponde à busca."
+    : catalogo.length
+      ? `Pesquise por nome, código, categoria ou medida para exibir os produtos (mínimo de ${MIN_CARACTERES_BUSCA} caracteres).`
+      : "Nenhum pneu ativo cadastrado. Use a aba Produtos para montar o catálogo.";
   return `<section class="card venda-etapa-conteudo">
-    <span class="meta">Etapa 2 de 5</span><h2>Catálogo de pneus</h2><p class="hint">Pesquise por nome, código, categoria ou medida e ajuste a quantidade no próprio produto.</p>
+    <span class="meta">Etapa 2 de 5</span><h2>Catálogo de pneus</h2><p class="hint">O catálogo abre vazio: pesquise por nome, código, categoria ou medida para exibir os pneus e ajuste a quantidade no próprio produto.</p>
     <div class="produto-venda-toolbar">
       <label>Buscar no catálogo<input id="buscaProdutoVenda" type="search" placeholder="Ex.: Continental, 205/55 R16 ou código" autocomplete="off" value="${escapeHtml(termo)}"></label>
-      <span class="produto-contagem">${produtos.length} de ${catalogo.length} produtos</span>
+      <span class="produto-contagem">${contagem}</span>
     </div>
-    <div class="produto-venda-grid">${produtos.length ? produtos.map(produtoVendaCardMarkup).join("") : `<p class="hint">${catalogo.length ? "Nenhum produto corresponde à busca." : "Nenhum pneu ativo cadastrado. Use a aba Produtos para montar o catálogo."}</p>`}</div>
+    <div class="produto-venda-grid">${produtos.length ? produtos.map(produtoVendaCardMarkup).join("") : `<p class="hint">${vazio}</p>`}</div>
     <div class="venda-subtotal"><span>${quantidadeSelecionada} pneus selecionados</span><strong>Subtotal pneus: ${money(subtotalPorTipo("pneu"))}</strong></div>
     <div class="venda-navegacao"><button class="btn ghost" type="button" data-anterior>← Anterior</button><button class="btn" type="button" data-proxima>Próximo: Serviços →</button></div>
   </section>`;

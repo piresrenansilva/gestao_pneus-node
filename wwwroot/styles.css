@@ -1253,8 +1253,203 @@ label {
   font-size: 14px;
 }
 
-label.full {
+label.full,
+.grid > .full {
   grid-column: 1 / -1;
+}
+
+/* Apontamento de carcaças: formulário à esquerda, lista ao lado (popup largo) */
+.modal.modal-largo {
+  width: min(1160px, 96vw);
+}
+
+.apontamento-grade {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(420px, 1.05fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.apontamento-resultados {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.apontamento-lista {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.apontamento-lista .apontamento-resultado {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+}
+
+.apontamento-lista .apontamento-resultado:last-child {
+  border-bottom: none;
+}
+
+.apontamento-resultado {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.apontamento-resultado-info {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 180px;
+  flex: 1;
+}
+
+.apontamento-resultado-custo {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.apontamento-lateral {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: 0 10px 24px var(--shadow);
+  max-height: 62vh;
+}
+
+.apontamento-lateral-titulo {
+  margin: 0;
+  font-size: 14px;
+}
+
+.apontamento-lateral-titulo small {
+  color: var(--muted);
+  font-weight: normal;
+}
+
+.apontamento-selecionados {
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.apontamento-tabela {
+  table-layout: fixed;
+  width: 100%;
+  min-width: 0;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.apontamento-tabela th:nth-child(1) { width: 54px; }
+.apontamento-tabela th:nth-child(3) { width: 64px; }
+.apontamento-tabela th:nth-child(4) { width: 56px; }
+.apontamento-tabela th:nth-child(5) { width: 90px; }
+.apontamento-tabela th:nth-child(6) { width: 84px; }
+.apontamento-tabela th:nth-child(7) { width: 30px; }
+
+.apontamento-tabela th {
+  font-size: 12px;
+  position: sticky;
+  top: 0;
+  background: var(--card);
+  text-align: left;
+  color: var(--muted);
+  font-weight: 600;
+  padding: 4px 5px;
+  border-bottom: 1px solid var(--line);
+  white-space: normal;
+  text-overflow: ellipsis;
+}
+
+.apontamento-tabela td:nth-child(1) {
+  white-space: nowrap;
+}
+
+.apontamento-tabela td {
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+.apontamento-num {
+  text-align: center;
+  white-space: nowrap;
+}
+
+.apontamento-tabela input[type="number"],
+.apontamento-tabela input[type="text"] {
+  width: 100%;
+  box-sizing: border-box;
+  text-align: center;
+  padding-left: 6px;
+  padding-right: 6px;
+  min-width: 0;
+}
+
+.apontamento-linha-total {
+  font-weight: 700;
+}
+
+.apontamento-remove {
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+.apontamento-total-geral {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+  font-weight: 700;
+}
+
+@media (max-width: 900px) {
+  .apontamento-grade {
+    grid-template-columns: 1fr;
+  }
+}
+
+.ordem-carcaca {
+  margin-bottom: 12px;
+}
+
+.ordem-carcaca-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ordem-carcaca-itens {
+  margin: 10px 0;
+}
+
+.ordem-carcaca-itens summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.ordem-carcaca-itens table {
+  width: 100%;
+  margin-top: 6px;
+  font-size: 14px;
+}
+
+.ordem-carcaca-itens th,
+.ordem-carcaca-itens td {
+  padding: 6px 8px;
+  text-align: left;
 }
 
 .carcaca-valor-total output {
@@ -1669,3 +1864,26 @@ label.full {
   text-align: center;
   min-height: 1.2em;
 }
+/* Marca de versão da interface (confirmação visual de deploy) */
+.versao-app {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--muted);
+  text-align: center;
+  opacity: 0.75;
+  user-select: none;
+}
+
+/* Remove as setas de incremento/decremento nas caixas numéricas do apontamento */
+.apontamento-tabela input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.apontamento-tabela input[type="number"]::-webkit-outer-spin-button,
+.apontamento-tabela input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.apontamento-tabela input[type="number"] { text-align: center; }

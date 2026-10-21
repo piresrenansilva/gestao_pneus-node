@@ -1,7 +1,7 @@
 
 @echo off
 title Fabrica de Pneus - Sistema
-cd /d "C:\Users\supor\Downloads\workspace-01a1514d-a95c-7573-9d10-44608048f7f1\projeto_gestao_pneus_node"
+cd /d "D:\pessoal\projetos\system_pneus\gestao\gestao_pneus-node"
 
 echo ========================================
 echo       FABRICA DE PNEUS

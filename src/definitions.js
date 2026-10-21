@@ -63,6 +63,14 @@ const tables = {
   boletos: {
     table: 'boletos',
     columns: [S('origem', 20), S('pessoa', 150), S('numero', 100), M('valor'), T('vencimento'), S('ref', 150), S('status', 30)]
+  },
+  carcacaOrdens: {
+    table: 'carcaca_ordens',
+    columns: [RO('numero'), T('data'), S('dono', 150), S('origem', 30), S('status', 30), S('obs', 500), M('total')]
+  },
+  carcacaOrdemItens: {
+    table: 'carcaca_ordem_itens',
+    columns: [G('ordemId'), G('produtoRef'), S('produtoId', 60), S('item', 200), S('medida', 60), I('qtd'), M('valorUnitario'), M('valorTotal')]
   }
 };
 

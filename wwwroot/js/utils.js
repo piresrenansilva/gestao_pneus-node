@@ -21,7 +21,7 @@ const totalPecasPedido = (pedido) => (pedido?.itens || []).reduce((soma, item) =
 }, 0);
 const overdue = (date, status) => date && !["pago", "paga", "cancelado", "cancelada"].includes(status) && date < today();
 
-let db = { clientes: [], veiculos: [], servicos: [], produtos: [], carcacas: [], estoque: [], producao: [], cargas: [], pedidos: [], financeiro: [], contas: [], boletos: [] };
+let db = { clientes: [], veiculos: [], servicos: [], produtos: [], carcacas: [], carcacaOrdens: [], estoque: [], producao: [], cargas: [], pedidos: [], financeiro: [], contas: [], boletos: [] };
 let page = "painel";
 let pedidoId = null;
 let editingPedidoId = null;
@@ -152,9 +152,10 @@ async function api(url, options = {}) {
 
 async function load() {
   db = await api("/api/dados");
-  for (const key of ["clientes", "veiculos", "servicos", "produtos", "carcacas", "estoque", "producao", "cargas", "pedidos", "financeiro", "contas", "boletos"])
+  for (const key of ["clientes", "veiculos", "servicos", "produtos", "carcacas", "carcacaOrdens", "estoque", "producao", "cargas", "pedidos", "financeiro", "contas", "boletos"])
     if (!Array.isArray(db[key])) db[key] = [];
   db.pedidos = db.pedidos.map((p) => ({ ...p, itens: p.itens || [] }));
+  db.carcacaOrdens = db.carcacaOrdens.map((o) => ({ ...o, itens: o.itens || [] }));
 }
 
 async function reloadAndRender() {
@@ -192,7 +193,7 @@ const TITLES = {
   veiculos: ["Veículos", "Veículos vinculados às entidades."],
   produtos: ["Produtos", "Catálogo de produtos."],
   servicos: ["Serviços", "Catálogo de serviços oferecidos pela oficina."],
-  carcacas: ["Carcaças", "Medidas, quantidades, valores de entrada e situação."],
+  carcacas: ["Apontamentos de carcaças", "Ordens de entrada de carcaças: selecione as carcaças, informe os valores e confira o total."],
   estoque: ["Estoque", "Pneus, recapados e insumos."],
   producao: ["Produção", "Apontamento por turno, medida e operador."],
   cargas: ["Carga e descarga", "Entrada e saída de pátio."],

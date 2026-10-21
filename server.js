@@ -19,6 +19,7 @@ const {
   updateRow,
   deleteRow,
   createOrUpdateSale,
+  createOrUpdateCarcacaOrdem,
   parseGuid
 } = require('./src/operations');
 const { createOrderPdf } = require('./src/pdf');
@@ -185,6 +186,15 @@ app.put('/api/vendas/:id', asyncRoute(async (req, res) => {
   res.json(await createOrUpdateSale(pool, req.body, id));
 }));
 
+// Apontamentos de entrada de carcaças (ordem com itens e total).
+app.post('/api/carcaca-ordens', asyncRoute(async (req, res) => {
+  res.json(await createOrUpdateCarcacaOrdem(pool, req.body));
+}));
+app.put('/api/carcaca-ordens/:id', asyncRoute(async (req, res) => {
+  const id = parseGuid(req.params.id, 'Identificador do apontamento');
+  res.json(await createOrUpdateCarcacaOrdem(pool, req.body, id));
+}));
+
 app.get('/api/pedidos/:id/pdf', asyncRoute(async (req, res) => {
   const pdf = await createOrderPdf(pool, req.params.id);
   res.setHeader('Content-Type', 'application/pdf');
@@ -204,6 +214,7 @@ app.put('/api/:route/:id', asyncRoute(async (req, res) => {
   const route = req.params.route;
   if (!tables[route]) throw notFound('Rota não encontrada.');
   if (route === 'itens') throw conflict('Itens de pedidos são gerenciados pelo fluxo de vendas.');
+  if (route === 'carcacaOrdens' || route === 'carcacaOrdemItens') throw conflict('Apontamentos de carcaças são gerenciados pelo fluxo de apontamentos.');
   await updateRow(pool, route, req.params.id, req.body);
   res.status(204).end();
 }));
@@ -211,6 +222,7 @@ app.delete('/api/:route/:id', asyncRoute(async (req, res) => {
   const route = req.params.route;
   if (!tables[route]) throw notFound('Rota não encontrada.');
   if (route === 'itens') throw conflict('Itens de pedidos são gerenciados pelo fluxo de vendas.');
+  if (route === 'carcacaOrdemItens') throw conflict('Itens de apontamentos são gerenciados pelo fluxo de apontamentos.');
   await deleteRow(pool, route, req.params.id);
   res.status(204).end();
 }));

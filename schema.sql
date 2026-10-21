@@ -264,3 +264,38 @@ CREATE TABLE dbo.boletos (
     status      nvarchar(30)  NULL
 );
 GO
+
+IF OBJECT_ID('dbo.seq_carcaca_ordem', 'SO') IS NULL
+    CREATE SEQUENCE dbo.seq_carcaca_ordem START WITH 1 INCREMENT BY 1;
+GO
+
+-- Apontamentos de entrada de carcaças: cada ordem seleciona produtos da
+-- categoria Carcaça com quantidade e valor unitário, e guarda o total.
+IF OBJECT_ID('dbo.carcaca_ordens', 'U') IS NULL
+CREATE TABLE dbo.carcaca_ordens (
+    id         uniqueidentifier NOT NULL CONSTRAINT DF_carcaca_ordens_id DEFAULT NEWID() CONSTRAINT PK_carcaca_ordens PRIMARY KEY,
+    criadoEm   datetime2        NOT NULL CONSTRAINT DF_carcaca_ordens_criadoEm DEFAULT SYSDATETIME(),
+    numero     nvarchar(20)     NOT NULL,
+    data       date             NULL,
+    dono       nvarchar(150)    NULL,
+    origem     nvarchar(30)     NULL,
+    status     nvarchar(30)     NOT NULL CONSTRAINT DF_carcaca_ordens_status DEFAULT N'registrado',
+    obs        nvarchar(500)    NULL,
+    total      decimal(12,2)    NOT NULL CONSTRAINT DF_carcaca_ordens_total DEFAULT 0
+);
+GO
+
+IF OBJECT_ID('dbo.carcaca_ordem_itens', 'U') IS NULL
+CREATE TABLE dbo.carcaca_ordem_itens (
+    id            uniqueidentifier NOT NULL CONSTRAINT DF_carcaca_ordem_itens_id DEFAULT NEWID() CONSTRAINT PK_carcaca_ordem_itens PRIMARY KEY,
+    criadoEm      datetime2        NOT NULL CONSTRAINT DF_carcaca_ordem_itens_criadoEm DEFAULT SYSDATETIME(),
+    ordemId       uniqueidentifier NOT NULL CONSTRAINT FK_carcaca_ordem_itens_ordem REFERENCES dbo.carcaca_ordens(id) ON DELETE CASCADE,
+    produtoRef    uniqueidentifier NULL,
+    produtoId     nvarchar(60)     NULL,
+    item          nvarchar(200)    NULL,
+    medida        nvarchar(60)     NULL,
+    qtd           int              NOT NULL CONSTRAINT DF_carcaca_ordem_itens_qtd DEFAULT 0,
+    valorUnitario decimal(12, 2)   NOT NULL CONSTRAINT DF_carcaca_ordem_itens_valorUnitario DEFAULT 0,
+    valorTotal    decimal(12, 2)   NOT NULL CONSTRAINT DF_carcaca_ordem_itens_valorTotal DEFAULT 0
+);
+GO

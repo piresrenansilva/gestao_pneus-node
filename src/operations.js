@@ -101,21 +101,26 @@ async function readTable(pool, definition) {
   });
 }
 
+function embedItems(rows, items, fk) {
+  const byParent = new Map();
+  for (const item of items) {
+    const parentId = String(item[fk] || '').toLowerCase();
+    if (!byParent.has(parentId)) byParent.set(parentId, []);
+    byParent.get(parentId).push(item);
+  }
+  for (const row of rows || []) {
+    row.itens = byParent.get(String(row.id || '').toLowerCase()) || [];
+  }
+}
+
 async function getAllData(pool) {
   const data = {};
+  const embedOnly = new Set(['itens', 'carcacaOrdemItens']);
   for (const [route, definition] of Object.entries(tables)) {
-    if (route !== 'itens') data[route] = await readTable(pool, definition);
+    if (!embedOnly.has(route)) data[route] = await readTable(pool, definition);
   }
-  const items = await readTable(pool, tables.itens);
-  const byOrder = new Map();
-  for (const item of items) {
-    const orderId = String(item.pedidoId || '').toLowerCase();
-    if (!byOrder.has(orderId)) byOrder.set(orderId, []);
-    byOrder.get(orderId).push(item);
-  }
-  for (const order of data.pedidos || []) {
-    order.itens = byOrder.get(String(order.id || '').toLowerCase()) || [];
-  }
+  embedItems(data.pedidos, await readTable(pool, tables.itens), 'pedidoId');
+  embedItems(data.carcacaOrdens, await readTable(pool, tables.carcacaOrdemItens), 'ordemId');
   return data;
 }
 
@@ -164,6 +169,9 @@ async function createRow(pool, route, body) {
   if (!isObject(body)) throw badRequest('O corpo da requisição deve ser um objeto JSON.');
   if (route === 'pedidos' || route === 'itens') {
     throw conflict('Pedidos e itens devem ser criados pelo fluxo de vendas para preservar o estoque e os preços.');
+  }
+  if (route === 'carcacaOrdens' || route === 'carcacaOrdemItens') {
+    throw conflict('Apontamentos de carcaças e seus itens devem ser criados pelo fluxo de apontamentos.');
   }
 
   const fields = definition.columns.filter((column) => !column.readOnly && Object.prototype.hasOwnProperty.call(body, column.name));
@@ -472,6 +480,16 @@ async function deleteRow(pool, route, id) {
       if (status == null) throw notFound('Pedido não encontrado.');
       if (isSaleCompleted(status)) await adjustOrderStock(transaction, validId, false);
     }
+    if (route === 'carcacaOrdens') {
+      const existing = await new sql.Request(transaction)
+        .input('id', sql.UniqueIdentifier, validId)
+        .query('SELECT status FROM dbo.carcaca_ordens WITH (UPDLOCK, HOLDLOCK) WHERE id = @id');
+      const status = existing.recordset[0]?.status;
+      if (status == null) throw notFound('Apontamento não encontrado.');
+      if (String(status).toLowerCase() === 'conferido') {
+        throw conflict('Apontamentos conferidos não podem ser excluídos.');
+      }
+    }
 
     const result = await new sql.Request(transaction)
       .input('id', sql.UniqueIdentifier, validId)
@@ -510,12 +528,140 @@ async function getOrderForPdf(pool, id) {
   return { ...order, itens: itemsResult.recordset };
 }
 
+function normalizeCarcacaCategoria(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+// Apontamento de entrada de carcaças: ordem com itens (produtos da categoria
+// Carcaça), valor unitário por carcaça, total por linha e total do apontamento.
+async function createOrUpdateCarcacaOrdem(pool, body, existingOrdemId = null) {
+  if (!isObject(body)) throw badRequest('O corpo do apontamento deve ser um objeto JSON.');
+  const data = parseDate(body.data || localToday(), 'Data');
+  const dono = getText(body, 'dono');
+  const origem = getText(body, 'origem');
+  const obs = getText(body, 'obs');
+  const status = String(getText(body, 'status') || 'registrado').trim().toLowerCase();
+  if (!['registrado', 'conferido'].includes(status)) throw conflict('Status de apontamento inválido.');
+
+  const itens = body.itens;
+  if (!Array.isArray(itens) || itens.length === 0) {
+    throw conflict('Selecione ao menos uma carcaça antes de salvar o apontamento.');
+  }
+
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin(sql.ISOLATION_LEVEL.READ_COMMITTED);
+  try {
+    if (existingOrdemId) {
+      const existing = await new sql.Request(transaction)
+        .input('id', sql.UniqueIdentifier, existingOrdemId)
+        .query('SELECT status FROM dbo.carcaca_ordens WITH (UPDLOCK, HOLDLOCK) WHERE id = @id');
+      const currentStatus = existing.recordset[0]?.status;
+      if (!currentStatus) throw notFound('O apontamento não foi encontrado.');
+      if (String(currentStatus).toLowerCase() !== 'registrado') {
+        throw conflict('Somente apontamentos registrados podem ser editados.');
+      }
+    }
+
+    const normalizedItems = [];
+    let total = 0;
+    for (const item of itens) {
+      const productRef = parseGuid(item.produtoRef, 'Carcaça');
+      if (!productRef) throw conflict('Uma carcaça do apontamento não tem produto válido.');
+      const quantity = parseNumber(item.qtd, 'Quantidade', { integer: true });
+      if (quantity < 1) throw conflict('Cada carcaça deve ter uma quantidade inteira maior que zero.');
+      const productResult = await new sql.Request(transaction)
+        .input('id', sql.UniqueIdentifier, productRef)
+        .query("SELECT produtoId, nome, medida, custo, categoria FROM dbo.produtos WHERE id = @id AND status <> N'Inativo'");
+      const product = productResult.recordset[0];
+      if (!product) throw conflict('Uma das carcaças selecionadas não existe ou está inativa.');
+      if (!['carcaca', 'carcacas'].includes(normalizeCarcacaCategoria(product.categoria))) {
+        throw conflict('Somente produtos da categoria Carcaça podem entrar no apontamento.');
+      }
+      const unitValue = normalizeSaleUnitPrice(item.valorUnitario, product.custo, 'Valor unitário da carcaça');
+      const lineTotal = Math.round((quantity * unitValue + Number.EPSILON) * 100) / 100;
+      total = Math.round((total + lineTotal + Number.EPSILON) * 100) / 100;
+      normalizedItems.push({
+        productRef,
+        code: product.produtoId || '',
+        name: product.nome,
+        measure: product.medida || '',
+        quantity,
+        unitValue,
+        lineTotal
+      });
+    }
+
+    let ordemId;
+    let ordemNumero;
+    if (existingOrdemId) {
+      const update = await new sql.Request(transaction)
+        .input('id', sql.UniqueIdentifier, existingOrdemId)
+        .input('data', sql.Date, data)
+        .input('dono', sql.NVarChar(150), dono)
+        .input('origem', sql.NVarChar(30), origem)
+        .input('status', sql.NVarChar(30), status)
+        .input('obs', sql.NVarChar(500), obs)
+        .input('total', sql.Decimal(12, 2), total)
+        .query(`UPDATE dbo.carcaca_ordens
+                SET data=@data, dono=@dono, origem=@origem, status=@status, obs=@obs, total=@total
+                OUTPUT inserted.id, inserted.numero
+                WHERE id=@id AND status=N'registrado'`);
+      const ordem = update.recordset[0];
+      if (!ordem) throw conflict('O apontamento deixou de ser registrado e não pode ser alterado.');
+      ordemId = ordem.id;
+      ordemNumero = ordem.numero;
+      await new sql.Request(transaction)
+        .input('id', sql.UniqueIdentifier, ordemId)
+        .query('DELETE FROM dbo.carcaca_ordem_itens WHERE ordemId = @id');
+    } else {
+      const inserted = await new sql.Request(transaction)
+        .input('data', sql.Date, data)
+        .input('dono', sql.NVarChar(150), dono)
+        .input('origem', sql.NVarChar(30), origem)
+        .input('status', sql.NVarChar(30), status)
+        .input('obs', sql.NVarChar(500), obs)
+        .input('total', sql.Decimal(12, 2), total)
+        .query(`INSERT INTO dbo.carcaca_ordens (numero, data, dono, origem, status, obs, total)
+                OUTPUT inserted.id, inserted.numero
+                VALUES ('CAR-' + FORMAT(NEXT VALUE FOR dbo.seq_carcaca_ordem, '0000'), @data, @dono, @origem, @status, @obs, @total)`);
+      ordemId = inserted.recordset[0].id;
+      ordemNumero = inserted.recordset[0].numero;
+    }
+
+    for (const item of normalizedItems) {
+      await new sql.Request(transaction)
+        .input('ordemId', sql.UniqueIdentifier, ordemId)
+        .input('produtoRef', sql.UniqueIdentifier, item.productRef)
+        .input('produtoId', sql.NVarChar(60), item.code)
+        .input('item', sql.NVarChar(200), item.name)
+        .input('medida', sql.NVarChar(60), item.measure)
+        .input('qtd', sql.Int, item.quantity)
+        .input('valorUnitario', sql.Decimal(12, 2), item.unitValue)
+        .input('valorTotal', sql.Decimal(12, 2), item.lineTotal)
+        .query(`INSERT INTO dbo.carcaca_ordem_itens
+                  (ordemId, produtoRef, produtoId, item, medida, qtd, valorUnitario, valorTotal)
+                VALUES (@ordemId, @produtoRef, @produtoId, @item, @medida, @qtd, @valorUnitario, @valorTotal)`);
+    }
+
+    await transaction.commit();
+    return { id: String(ordemId), numero: String(ordemNumero), total };
+  } catch (error) {
+    await transaction.rollback().catch(() => {});
+    throw error;
+  }
+}
+
 module.exports = {
   getAllData,
   createRow,
   updateRow,
   deleteRow,
   createOrUpdateSale,
+  createOrUpdateCarcacaOrdem,
   getOrderForPdf,
   parseGuid,
   normalizeSaleUnitPrice

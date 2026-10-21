@@ -15,12 +15,12 @@ function render() {
   const [title, lede] = TITLES[page];
   document.getElementById("title").textContent = title;
   document.getElementById("lede").textContent = lede;
-  const creates = { clientes: "Cadastrar entidade", veiculos: "Cadastrar veículo", servicos: "Cadastrar serviço", produtos: "Cadastrar produto", carcacas: "Nova carcaça", estoque: "Novo item", producao: "Novo apontamento", cargas: "Novo movimento", vendas: "Novo pedido", financeiro: "Novo lançamento", contas: "Novo título", boletos: "Novo boleto" };
+  const creates = { clientes: "Cadastrar entidade", veiculos: "Cadastrar veículo", servicos: "Cadastrar serviço", produtos: "Cadastrar produto", carcacas: "Novo apontamento", estoque: "Novo item", producao: "Novo apontamento", cargas: "Novo movimento", vendas: "Novo pedido", financeiro: "Novo lançamento", contas: "Novo título", boletos: "Novo boleto" };
   actions.innerHTML = creates[page] ? `<button class="btn" id="addBtn">${creates[page]}</button>` : "";
   addLogoutButton();
   view.innerHTML = views[page]();
   const add = document.getElementById("addBtn");
-  if (add) add.onclick = () => page === "vendas" ? iniciarPedido() : openForm(page);
+  if (add) add.onclick = () => page === "vendas" ? iniciarPedido() : openForm(page === "carcacas" ? "carcacaOrdens" : page);
   const q = document.getElementById("q");
   if (q) q.oninput = () => { query = q.value; const pos = q.selectionStart; render(); const next = document.getElementById("q"); if (next) { next.focus(); next.selectionStart = next.selectionEnd = pos; } };
   view.querySelectorAll("[data-edit]").forEach((b) => b.onclick = () => {
@@ -42,7 +42,7 @@ function render() {
 
 const views = {
   painel() {
-    const carc = db.carcacas.reduce((a, r) => a + Number(r.qtd || 0), 0);
+    const carc = (db.carcacaOrdens || []).reduce((soma, ordem) => soma + (ordem.itens || []).reduce((a, i) => a + Number(i.qtd || 0), 0), 0);
     const est = db.estoque.reduce((a, r) => a + Number(r.qtd || 0), 0);
     const baixos = db.estoque.filter((r) => Number(r.qtd) < Number(r.minimo));
     const mes = today().slice(0, 7);
@@ -103,15 +103,45 @@ const views = {
     escapeHtml(r.codigo), escapeHtml(r.nome), escapeHtml(r.descricao), money(r.preco), badge(r.status)
   ]); },
   carcacas() {
-    const quantidadeTotal = db.carcacas.reduce((soma, row) => soma + (Number(row.qtd) || 0), 0);
-    const custoTotal = db.carcacas.reduce((soma, row) => soma + (Number(row.qtd) || 0) * (Number(row.valorUnitario) || 0), 0);
+    const ordens = db.carcacaOrdens || [];
+    const busca = normalizarBuscaEntidade(query);
+    const lista = ordens.filter((ordem) => !busca || normalizarBuscaEntidade([
+      ordem.numero, ordem.dono, ordem.origem, ordem.status
+    ].join(" ")).includes(busca));
+    const quantidadeTotal = ordens.reduce((soma, ordem) => soma + (ordem.itens || []).reduce((a, i) => a + (Number(i.qtd) || 0), 0), 0);
+    const valorTotal = ordens.reduce((soma, ordem) => soma + (Number(ordem.total) || 0), 0);
     return `<div class="produto-resumo-kpis carcacas-resumo-kpis">
-      <div class="produto-resumo-kpi"><span>Quantidade total cadastrada</span><strong>${quantidadeTotal} <small>un.</small></strong></div>
-      <div class="produto-resumo-kpi"><span>Custo total de entrada</span><strong>${money(custoTotal)}</strong></div>
-    </div>${table("carcacas", ["Medida", "Quantidade", "Valor unitário", "Status", "Valor total"], (r) => [
-      escapeHtml(r.medida), r.qtd, money(r.valorUnitario), badge(r.status),
-      money((Number(r.qtd) || 0) * (Number(r.valorUnitario) || 0))
-    ])}`;
+      <div class="produto-resumo-kpi"><span>Apontamentos</span><strong>${ordens.length}</strong></div>
+      <div class="produto-resumo-kpi"><span>Carcaças apontadas</span><strong>${quantidadeTotal} <small>un.</small></strong></div>
+      <div class="produto-resumo-kpi"><span>Valor total apontado</span><strong>${money(valorTotal)}</strong></div>
+    </div>
+    <div class="toolbar"><input id="q" placeholder="Filtrar por número, dono ou status" value="${escapeAttr(query)}" /></div>
+    ${lista.length ? lista.map((ordem) => {
+      const itens = ordem.itens || [];
+      const quantidade = itens.reduce((a, i) => a + (Number(i.qtd) || 0), 0);
+      const registrado = String(ordem.status || "").trim().toLocaleLowerCase("pt-BR") === "registrado";
+      return `<section class="card ordem-carcaca">
+        <div class="ordem-carcaca-topo"><span class="mono">${escapeHtml(ordem.numero || "—")}</span>${badge(ordem.status)}</div>
+        <dl class="capa">
+          <div><dt>Data</dt><dd>${br(ordem.data)}</dd></div>
+          <div><dt>Dono / fornecedor</dt><dd>${escapeHtml(ordem.dono || "—")}</dd></div>
+          <div><dt>Origem</dt><dd>${escapeHtml(ordem.origem || "—")}</dd></div>
+          <div><dt>Carcaças</dt><dd class="num">${quantidade} un.</dd></div>
+          <div><dt>Total</dt><dd class="num">${money(ordem.total)}</dd></div>
+        </dl>
+        <details class="ordem-carcaca-itens"><summary>Ver itens (${itens.length})</summary>
+          <div class="table-wrap"><table><thead><tr><th>Código</th><th>Carcaça</th><th>Medida</th><th>Qtd</th><th>Valor unit.</th><th>Total</th></tr></thead>
+          <tbody>${itens.map((item) => `<tr>
+            <td>${escapeHtml(item.produtoId || "—")}</td><td>${escapeHtml(item.item || "—")}</td><td>${escapeHtml(item.medida || "—")}</td>
+            <td>${item.qtd}</td><td>${money(item.valorUnitario)}</td>
+            <td>${money(item.valorTotal !== "" && item.valorTotal != null ? item.valorTotal : (Number(item.qtd) || 0) * (Number(item.valorUnitario) || 0))}</td>
+          </tr>`).join("")}</tbody></table></div>
+        </details>
+        <div class="produto-admin-acoes">${registrado
+          ? `<button class="btn ghost small" type="button" data-edit="carcacaOrdens:${escapeHtml(ordem.id)}">Editar</button><button class="btn danger small" type="button" data-del="carcacaOrdens:${escapeHtml(ordem.id)}">Excluir</button>`
+          : `<span class="hint">Apontamento conferido — somente leitura.</span>`}</div>
+      </section>`;
+    }).join("") : `<p class="hint">${ordens.length ? "Nenhum apontamento corresponde à pesquisa." : "Nenhum apontamento criado. Use “Novo apontamento” para registrar a entrada de carcaças."}</p>`}`;
   },
   estoque() { return table("estoque", ["produtoId", "Descrição", "Medida", "Qtd", "Mínimo"], (r) => {
     const produto = db.produtos.find(p =>
@@ -119,14 +149,13 @@ const views = {
     );
     return [escapeHtml(r.produtoId || produto?.produtoId || ""), escapeHtml(produto?.nome || r.item || ""), escapeHtml(r.medida || produto?.medida || ""), r.qtd, r.minimo];
   }); },
-  producao() { return table("producao", ["Data", "Turno", "Medida", "Qtd", "Carcaças", "Operador", "Status"], (r) => [br(r.data), escapeHtml(r.turno), escapeHtml(r.medida), r.qtd, r.carcacas, escapeHtml(r.operador), badge(r.status)]); },
-  cargas() { return table("cargas", ["Tipo", "Data", "Venda", "Cliente", "Peças", "Motorista", "Funcionário", "Transportadora", "NF", "Status"], (r) => {
+  producao() { return table("producao", ["Data", "Turno", "Medida", "Qtd", "Operador", "Status"], (r) => [br(r.data), escapeHtml(r.turno), escapeHtml(r.medida), r.qtd, escapeHtml(r.operador), badge(r.status)]); },
+  cargas() { return table("cargas", ["Tipo", "Data", "Venda", "Cliente", "Peças", "Motorista", "Funcionário", "Status"], (r) => {
     const venda = db.pedidos.find((pedido) => sameId(pedido.id, r.pedidoId));
     const cliente = venda?.cliente || db.clientes.find((item) => sameId(item.id, venda?.clienteId))?.nome || "—";
     return [
       escapeHtml(r.tipo), br(r.data), escapeHtml(venda?.numero || "—"), escapeHtml(cliente),
-      venda ? totalPecasPedido(venda) : "—", escapeHtml(r.motorista), escapeHtml(r.funcionario),
-      escapeHtml(r.transportadora || r.parceiro || ""), escapeHtml(r.nf), badge(r.status)
+      venda ? totalPecasPedido(venda) : "—", escapeHtml(r.motorista), escapeHtml(r.funcionario), badge(r.status)
     ];
   }); },
   vendas() {
