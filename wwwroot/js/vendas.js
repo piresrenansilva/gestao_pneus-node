@@ -175,13 +175,13 @@ function clienteEtapaMarkup() {
     </label>
     <div id="sugestoesEntidadeVenda" class="cliente-sugestoes" role="listbox">
       ${termoBusca.length >= 3 && !selecionado
-        ? sugestoes.length
-          ? sugestoes.map((cliente) => `<button type="button" class="cliente-sugestao" role="option" aria-selected="false" data-cliente-venda="${escapeHtml(cliente.id)}">
+      ? sugestoes.length
+        ? sugestoes.map((cliente) => `<button type="button" class="cliente-sugestao" role="option" aria-selected="false" data-cliente-venda="${escapeHtml(cliente.id)}">
               <span><strong>${escapeHtml(cliente.nome)}</strong><small>${escapeHtml(cliente.documento || "Documento não cadastrado")}</small></span>
               <span class="cliente-sugestao-contato">${escapeHtml(cliente.telefone || cliente.email || "")}</span>
             </button>`).join("")
-          : `<p class="cliente-sugestoes-vazio">Nenhum cliente correspondente.</p>`
-        : ""}
+        : `<p class="cliente-sugestoes-vazio">Nenhum cliente correspondente.</p>`
+      : ""}
     </div>
     ${selecionado ? `<div class="cliente-resumo">
       <div><span class="meta">Cliente</span><strong>${escapeHtml(selecionado.nome)}</strong><span>${escapeHtml(selecionado.documento || "Documento não cadastrado")}</span></div>
@@ -323,15 +323,15 @@ function pagamentoEtapaMarkup() {
     <div class="venda-resumo">${vendaRascunho.itens.map((item) => `<div><span>${item.qtd} × ${escapeHtml(item.descricao)}${item.medida ? ` ${escapeHtml(item.medida)}` : ""}</span><strong>${money(item.qtd * item.unitario)}</strong></div>`).join("") || `<p class="hint">Nenhum item selecionado. Volte e adicione pneus ou serviços.</p>`}
       <div class="resumo-subtotal"><span>Subtotal pneus</span><strong>${money(subtotalPorTipo("pneu"))}</strong></div>
       <div><span>Subtotal serviços</span><strong>${money(subtotalPorTipo("servico"))}</strong></div>
-      <div class="desconto-linha"><label>Desconto (%)<input id="descontoPercentual" class="desc-perc" value="${percentual.toLocaleString('pt-BR', {minimumFractionDigits:2})}"></label>
-        <label>Valor do desconto (R$)<input id="descontoValor" class="desc-val" value="${desconto.toLocaleString('pt-BR', {minimumFractionDigits:2})}"></label></div>
+      <div class="desconto-linha"><label>Desconto (%)<input id="descontoPercentual" class="desc-perc" value="${percentual.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}"></label>
+        <label>Valor do desconto (R$)<input id="descontoValor" class="desc-val" value="${desconto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}"></label></div>
       <div class="venda-total"><span>Total final</span><strong id="totalFinal">${money(Math.max(0, subtotal - desconto))}</strong></div>
     </div>
     <div class="grid venda-pagamento">
       <label>Forma de pagamento<select id="pagamentoVenda">${["pix", "dinheiro", "cartão", "boleto", "a prazo"].map(v => `<option ${v === vendaRascunho.pagamento ? "selected" : ""}>${v}</option>`).join("")}</select></label>
       ${editingPedidoId
-        ? `<div class="pedido-status-bloqueado"><span class="meta">Status</span><strong>Orçamento · sem baixa de estoque</strong></div>`
-        : `<label>Status da venda<select id="statusVenda"><option value="orçamento" ${vendaRascunho.status === "orçamento" ? "selected" : ""}>Pedido (não baixa estoque)</option><option value="faturado" ${vendaRascunho.status === "faturado" ? "selected" : ""}>Faturar agora (baixa estoque)</option><option value="pago" ${vendaRascunho.status === "pago" ? "selected" : ""}>Pago e faturado (baixa estoque)</option></select></label>`}
+      ? `<div class="pedido-status-bloqueado"><span class="meta">Status</span><strong>Orçamento · sem baixa de estoque</strong></div>`
+      : `<label>Status da venda<select id="statusVenda"><option value="orçamento" ${vendaRascunho.status === "orçamento" ? "selected" : ""}>Pedido (não baixa estoque)</option><option value="faturado" ${vendaRascunho.status === "faturado" ? "selected" : ""}>Faturar agora (baixa estoque)</option><option value="pago" ${vendaRascunho.status === "pago" ? "selected" : ""}>Pago e faturado (baixa estoque)</option></select></label>`}
     </div>
     <h3 class="venda-agenda-titulo">Agendar na oficina (opcional)</h3>
     <div class="grid venda-pagamento">
@@ -592,7 +592,7 @@ async function baixarPdf(id) {
   }
   if (!response.ok) {
     let message = `Erro HTTP ${response.status}`;
-    try { const body = await response.json(); message = body.detail || message; } catch {}
+    try { const body = await response.json(); message = body.detail || message; } catch { }
     throw new Error(message);
   }
   const blob = await response.blob();
@@ -632,8 +632,8 @@ function renderPedido() {
       ${pedido.status === "orçamento" ? `<button class="btn ghost" id="editarOrcamento" type="button">Editar orçamento</button>` : ""}
       ${pedido.status === "orçamento" ? `<button class="btn" id="faturarPedido" type="button">Faturar e baixar estoque</button>` : ""}
       ${confirmDelete === `pedido:${pedido.id}`
-        ? `<button class="btn danger" id="confirmarExclusaoPedido" type="button">Confirmar exclusão</button><button class="btn ghost" id="cancelarExclusaoPedido" type="button">Cancelar</button>`
-        : `<button class="btn danger" id="pedirExclusaoPedido" type="button">Excluir pedido</button>`}
+      ? `<button class="btn danger" id="confirmarExclusaoPedido" type="button">Confirmar exclusão</button><button class="btn ghost" id="cancelarExclusaoPedido" type="button">Cancelar</button>`
+      : `<button class="btn danger" id="pedirExclusaoPedido" type="button">Excluir pedido</button>`}
     </div>
   </section>`;
   document.getElementById("backBtn").onclick = () => { pedidoId = null; render(); };
