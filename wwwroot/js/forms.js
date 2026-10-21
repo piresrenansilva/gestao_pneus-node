@@ -33,10 +33,14 @@ const FORMS = {
   ].join(""),
   produtos: () => [
     field("produtoId", "Código do produto", "text"), field("nome", "Nome", "text", "required"),
-    field("categoria", "Categoria", "text"), field("medida", "Medida", "text"),
+    field("categoria", "Categoria", "select"),
+    `<label class="full" id="carcacaProdutoCampo" hidden>Carcaça (origem da medida e do custo)
+      <select id="carcacaProduto"></select>
+    </label>`,
+    field("medida", "Medida", "text"),
     field("unidade", "Unidade (ex.: un, pneu)", "text"), field("preco", "Preço de venda", "text", "required class='preco-mask'"),
     field("custo", "Custo unitário", "text", "required class='preco-mask'"),
-        field("status", "Status", "select"),
+    field("status", "Status", "select"),
     field("obs", "Observações", "textarea")
   ].join(""),
   veiculos: () => [
@@ -113,7 +117,7 @@ const SELECTS = {
   clientes: { tipo: ["Cliente", "Fornecedor", "Funcionário"], status: ["Ativo", "Inativo"] },
   veiculos: { status: ["Ativo", "Inativo"] },
   servicos: { status: ["Ativo", "Inativo"] },
-  produtos: { status: ["Ativo", "Inativo"] },
+  produtos: { categoria: ["Revenda", "Carcaça"], status: ["Ativo", "Inativo"] },
   carcacas: {
     origem: ["cliente", "compra", "retorno"],
     status: ["recebida", "inspecionada", "aprovada", "reprovada", "em produção", "pronta"]
@@ -259,8 +263,8 @@ async function buscarCnpj() {
     function formatarTelefone(num) {
       if (!num) return "";
       const d = String(num).replace(/\D/g, "");
-      if (d.length === 10) return `(${d.slice(0,2)}) ${d.slice(2,6)}-${d.slice(6)}`;
-      if (d.length === 11) return `(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}`;
+      if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+      if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
       return d;
     }
 
@@ -272,7 +276,7 @@ async function buscarCnpj() {
       const limpo = String(raw.telefone).replace(/\D/g, "");
       if (limpo.length > 11) {
         // tenta separar em blocos de 10 ou 11
-        for (let i = 0; i < limpo.length; ) {
+        for (let i = 0; i < limpo.length;) {
           const resto = limpo.length - i;
           const tam = resto >= 11 && resto % 10 !== 0 ? 11 : 10;
           if (resto < 10) break;
@@ -288,17 +292,17 @@ async function buscarCnpj() {
 
     const data = raw.razao_social || raw.nome
       ? {
-          razao_social: raw.razao_social || raw.nome,
-          nome_fantasia: raw.nome_fantasia || raw.fantasia,
-          cep: raw.cep,
-          logradouro: raw.logradouro,
-          numero: raw.numero,
-          complemento: raw.complemento,
-          bairro: raw.bairro,
-          municipio: raw.municipio,
-          uf: raw.uf,
-          telefone: telefoneFormatado
-        }
+        razao_social: raw.razao_social || raw.nome,
+        nome_fantasia: raw.nome_fantasia || raw.fantasia,
+        cep: raw.cep,
+        logradouro: raw.logradouro,
+        numero: raw.numero,
+        complemento: raw.complemento,
+        bairro: raw.bairro,
+        municipio: raw.municipio,
+        uf: raw.uf,
+        telefone: telefoneFormatado
+      }
       : { ...raw, telefone: telefoneFormatado };
 
     const form = document.getElementById("form");
@@ -404,6 +408,42 @@ function openForm(kind, row) {
       if (form.elements.medida) form.elements.medida.value = row.medida || produto?.medida || "";
     }
   } else if (getField(form, "data")) getField(form, "data").value = today();
+  if (kind === "produtos") {
+    const categoriaSel = form.querySelector('select[name="categoria"]');
+    const carcacaCampo = document.getElementById("carcacaProdutoCampo");
+    const carcacaSel = document.getElementById("carcacaProduto");
+    // Preserva no select categorias antigas diferentes de Revenda/Carcaça.
+    const categoriaAtual = String(row?.categoria || "").trim();
+    if (categoriaSel && categoriaAtual && ![...categoriaSel.options].some((option) => option.value.toLocaleLowerCase("pt-BR") === categoriaAtual.toLocaleLowerCase("pt-BR"))) {
+      categoriaSel.add(new Option(categoriaAtual, categoriaAtual), 0);
+    }
+    if (categoriaSel && categoriaAtual) categoriaSel.value = categoriaAtual;
+    // Lista as carcaças cadastradas: medida · dono · quantidade · valor unitário · status.
+    if (carcacaSel) {
+      const carcacas = [...db.carcacas].sort((a, b) => String(a.medida || "").localeCompare(String(b.medida || ""), "pt-BR"));
+      carcacaSel.innerHTML = `<option value="">Selecione uma carcaça...</option>` + carcacas.map((carcaca) =>
+        `<option value="${escapeAttr(carcaca.id)}">${escapeHtml(carcaca.medida || "Sem medida")}${carcaca.dono ? ` · ${escapeHtml(carcaca.dono)}` : ""} · ${Number(carcaca.qtd) || 0} un · ${money(Number(carcaca.valorUnitario) || 0)}${carcaca.status ? ` · ${escapeHtml(carcaca.status)}` : ""}</option>`
+      ).join("");
+    }
+    const atualizarCampoCarcaca = () => {
+      if (!carcacaCampo || !categoriaSel) return;
+      const ehCarcaca = String(categoriaSel.value || "").trim().toLocaleLowerCase("pt-BR") === "carcaça";
+      carcacaCampo.hidden = !ehCarcaca;
+      if (!ehCarcaca && carcacaSel) carcacaSel.value = "";
+    };
+    categoriaSel?.addEventListener("change", atualizarCampoCarcaca);
+    carcacaSel?.addEventListener("change", () => {
+      const carcaca = db.carcacas.find((item) => sameId(item.id, carcacaSel.value));
+      if (!carcaca) return;
+      const medidaEl = getField(form, "medida");
+      if (medidaEl && carcaca.medida) medidaEl.value = carcaca.medida;
+      // Preenche o "Custo unitário" com o valor de entrada da carcaça.
+      // Para preencher o campo "Preço de venda" em vez do custo, troque "custo" por "preco" na linha abaixo.
+      const custoEl = getField(form, "custo");
+      if (custoEl) custoEl.value = (Number(carcaca.valorUnitario) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    });
+    atualizarCampoCarcaca();
+  }
   if (kind === "cargas") {
     const vendaSelect = getField(form, "pedidoId");
     const buscaPedido = document.getElementById("buscaPedidoCarga");
@@ -442,12 +482,12 @@ function openForm(kind, row) {
       }).slice(0, 8);
       sugestoes.innerHTML = encontradas.length
         ? encontradas.map((venda) => {
-            const cliente = venda.cliente || db.clientes.find((item) => sameId(item.id, venda.clienteId))?.nome || "Cliente não informado";
-            return `<button type="button" class="carga-pedido-sugestao" role="option" aria-selected="false" data-pedido-carga="${escapeAttr(venda.id)}">
+          const cliente = venda.cliente || db.clientes.find((item) => sameId(item.id, venda.clienteId))?.nome || "Cliente não informado";
+          return `<button type="button" class="carga-pedido-sugestao" role="option" aria-selected="false" data-pedido-carga="${escapeAttr(venda.id)}">
               <strong>${escapeHtml(venda.numero || "Venda")}</strong>
               <span>${escapeHtml(cliente)} · ${totalPecasPedido(venda)} peças</span>
             </button>`;
-          }).join("")
+        }).join("")
         : `<div class="carga-pedido-sem-sugestoes">Nenhuma venda encontrada com esses números.</div>`;
       sugestoes.hidden = false;
       buscaPedido.setAttribute("aria-expanded", "true");

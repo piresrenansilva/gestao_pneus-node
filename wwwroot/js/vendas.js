@@ -172,13 +172,13 @@ function clienteEtapaMarkup() {
     </label>
     <div id="sugestoesEntidadeVenda" class="cliente-sugestoes" role="listbox">
       ${termoBusca.length >= 3 && !selecionado
-        ? sugestoes.length
-          ? sugestoes.map((cliente) => `<button type="button" class="cliente-sugestao" role="option" aria-selected="false" data-cliente-venda="${escapeHtml(cliente.id)}">
+      ? sugestoes.length
+        ? sugestoes.map((cliente) => `<button type="button" class="cliente-sugestao" role="option" aria-selected="false" data-cliente-venda="${escapeHtml(cliente.id)}">
               <span><strong>${escapeHtml(cliente.nome)}</strong><small>${escapeHtml(cliente.documento || "Documento não cadastrado")}</small></span>
               <span class="cliente-sugestao-contato">${escapeHtml(cliente.telefone || cliente.email || "")}</span>
             </button>`).join("")
-          : `<p class="cliente-sugestoes-vazio">Nenhum cliente correspondente.</p>`
-        : ""}
+        : `<p class="cliente-sugestoes-vazio">Nenhum cliente correspondente.</p>`
+      : ""}
     </div>
     ${selecionado ? `<div class="cliente-resumo">
       <div><span class="meta">Cliente</span><strong>${escapeHtml(selecionado.nome)}</strong><span>${escapeHtml(selecionado.documento || "Documento não cadastrado")}</span></div>
@@ -234,20 +234,32 @@ function produtoVendaCardMarkup(produto) {
 }
 
 function produtosEtapaMarkup() {
+  const MIN_CARACTERES_BUSCA = 2;
   const catalogo = db.produtos.filter((produto) => produtoEhPneu(produto) && String(produto.status || "").toLowerCase() !== "inativo");
   const termo = String(vendaRascunho.buscaProduto || "");
   const busca = normalizarBuscaEntidade(termo.trim());
-  const produtos = catalogo.filter((produto) => !busca || normalizarBuscaEntidade([
-    produto.produtoId, produto.nome, produto.categoria, produto.medida
-  ].join(" ")).includes(busca));
+  const buscaAtiva = busca.length >= MIN_CARACTERES_BUSCA;
+  // Sem pesquisa, o catálogo não é exibido. Apenas os pneus já incluídos no
+  // pedido permanecem visíveis, para permitir ajustar ou remover a quantidade.
+  const produtos = buscaAtiva
+    ? catalogo.filter((produto) => normalizarBuscaEntidade([
+      produto.produtoId, produto.nome, produto.categoria, produto.medida
+    ].join(" ")).includes(busca))
+    : catalogo.filter((produto) => vendaRascunho.itens.some((item) => item.tipo === "pneu" && item.referencia === produto.id));
   const quantidadeSelecionada = vendaRascunho.itens.filter((item) => item.tipo === "pneu").reduce((soma, item) => soma + item.qtd, 0);
+  const contagem = buscaAtiva ? `${produtos.length} de ${catalogo.length} produtos` : `${catalogo.length} produtos no catálogo`;
+  const vazio = buscaAtiva
+    ? "Nenhum produto corresponde à busca."
+    : catalogo.length
+      ? `Pesquise por nome, código, categoria ou medida para exibir os produtos (mínimo de ${MIN_CARACTERES_BUSCA} caracteres).`
+      : "Nenhum pneu ativo cadastrado. Use a aba Produtos para montar o catálogo.";
   return `<section class="card venda-etapa-conteudo">
-    <span class="meta">Etapa 2 de 5</span><h2>Catálogo de pneus</h2><p class="hint">Pesquise por nome, código, categoria ou medida e ajuste a quantidade no próprio produto.</p>
+    <span class="meta">Etapa 2 de 5</span><h2>Catálogo de pneus</h2><p class="hint">O catálogo abre vazio: pesquise por nome, código, categoria ou medida para exibir os pneus e ajuste a quantidade no próprio produto.</p>
     <div class="produto-venda-toolbar">
       <label>Buscar no catálogo<input id="buscaProdutoVenda" type="search" placeholder="Ex.: Continental, 205/55 R16 ou código" autocomplete="off" value="${escapeHtml(termo)}"></label>
-      <span class="produto-contagem">${produtos.length} de ${catalogo.length} produtos</span>
+      <span class="produto-contagem">${contagem}</span>
     </div>
-    <div class="produto-venda-grid">${produtos.length ? produtos.map(produtoVendaCardMarkup).join("") : `<p class="hint">${catalogo.length ? "Nenhum produto corresponde à busca." : "Nenhum pneu ativo cadastrado. Use a aba Produtos para montar o catálogo."}</p>`}</div>
+    <div class="produto-venda-grid">${produtos.length ? produtos.map(produtoVendaCardMarkup).join("") : `<p class="hint">${vazio}</p>`}</div>
     <div class="venda-subtotal"><span>${quantidadeSelecionada} pneus selecionados</span><strong>Subtotal pneus: ${money(subtotalPorTipo("pneu"))}</strong></div>
     <div class="venda-navegacao"><button class="btn ghost" type="button" data-anterior>← Anterior</button><button class="btn" type="button" data-proxima>Próximo: Serviços →</button></div>
   </section>`;
@@ -308,15 +320,15 @@ function pagamentoEtapaMarkup() {
     <div class="venda-resumo">${vendaRascunho.itens.map((item) => `<div><span>${item.qtd} × ${escapeHtml(item.descricao)}${item.medida ? ` ${escapeHtml(item.medida)}` : ""}</span><strong>${money(item.qtd * item.unitario)}</strong></div>`).join("") || `<p class="hint">Nenhum item selecionado. Volte e adicione pneus ou serviços.</p>`}
       <div class="resumo-subtotal"><span>Subtotal pneus</span><strong>${money(subtotalPorTipo("pneu"))}</strong></div>
       <div><span>Subtotal serviços</span><strong>${money(subtotalPorTipo("servico"))}</strong></div>
-      <div class="desconto-linha"><label>Desconto (%)<input id="descontoPercentual" class="desc-perc" value="${percentual.toLocaleString('pt-BR', {minimumFractionDigits:2})}"></label>
-        <label>Valor do desconto (R$)<input id="descontoValor" class="desc-val" value="${desconto.toLocaleString('pt-BR', {minimumFractionDigits:2})}"></label></div>
+      <div class="desconto-linha"><label>Desconto (%)<input id="descontoPercentual" class="desc-perc" value="${percentual.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}"></label>
+        <label>Valor do desconto (R$)<input id="descontoValor" class="desc-val" value="${desconto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}"></label></div>
       <div class="venda-total"><span>Total final</span><strong id="totalFinal">${money(Math.max(0, subtotal - desconto))}</strong></div>
     </div>
     <div class="grid venda-pagamento">
       <label>Forma de pagamento<select id="pagamentoVenda">${["pix", "dinheiro", "cartão", "boleto", "a prazo"].map(v => `<option ${v === vendaRascunho.pagamento ? "selected" : ""}>${v}</option>`).join("")}</select></label>
       ${editingPedidoId
-        ? `<div class="pedido-status-bloqueado"><span class="meta">Status</span><strong>Orçamento · sem baixa de estoque</strong></div>`
-        : `<label>Status da venda<select id="statusVenda"><option value="orçamento" ${vendaRascunho.status === "orçamento" ? "selected" : ""}>Pedido (não baixa estoque)</option><option value="faturado" ${vendaRascunho.status === "faturado" ? "selected" : ""}>Faturar agora (baixa estoque)</option><option value="pago" ${vendaRascunho.status === "pago" ? "selected" : ""}>Pago e faturado (baixa estoque)</option></select></label>`}
+      ? `<div class="pedido-status-bloqueado"><span class="meta">Status</span><strong>Orçamento · sem baixa de estoque</strong></div>`
+      : `<label>Status da venda<select id="statusVenda"><option value="orçamento" ${vendaRascunho.status === "orçamento" ? "selected" : ""}>Pedido (não baixa estoque)</option><option value="faturado" ${vendaRascunho.status === "faturado" ? "selected" : ""}>Faturar agora (baixa estoque)</option><option value="pago" ${vendaRascunho.status === "pago" ? "selected" : ""}>Pago e faturado (baixa estoque)</option></select></label>`}
     </div>
     <h3 class="venda-agenda-titulo">Agendar na oficina (opcional)</h3>
     <div class="grid venda-pagamento">
@@ -577,7 +589,7 @@ async function baixarPdf(id) {
   }
   if (!response.ok) {
     let message = `Erro HTTP ${response.status}`;
-    try { const body = await response.json(); message = body.detail || message; } catch {}
+    try { const body = await response.json(); message = body.detail || message; } catch { }
     throw new Error(message);
   }
   const blob = await response.blob();
@@ -617,8 +629,8 @@ function renderPedido() {
       ${pedido.status === "orçamento" ? `<button class="btn ghost" id="editarOrcamento" type="button">Editar orçamento</button>` : ""}
       ${pedido.status === "orçamento" ? `<button class="btn" id="faturarPedido" type="button">Faturar e baixar estoque</button>` : ""}
       ${confirmDelete === `pedido:${pedido.id}`
-        ? `<button class="btn danger" id="confirmarExclusaoPedido" type="button">Confirmar exclusão</button><button class="btn ghost" id="cancelarExclusaoPedido" type="button">Cancelar</button>`
-        : `<button class="btn danger" id="pedirExclusaoPedido" type="button">Excluir pedido</button>`}
+      ? `<button class="btn danger" id="confirmarExclusaoPedido" type="button">Confirmar exclusão</button><button class="btn ghost" id="cancelarExclusaoPedido" type="button">Cancelar</button>`
+      : `<button class="btn danger" id="pedirExclusaoPedido" type="button">Excluir pedido</button>`}
     </div>
   </section>`;
   document.getElementById("backBtn").onclick = () => { pedidoId = null; render(); };

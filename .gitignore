@@ -11,3 +11,4 @@ logs/
 *.sqlite3
 *.db
 .DS_Store
+orcamento_ms_pneus.html

@@ -1257,6 +1257,11 @@ label.full {
   grid-column: 1 / -1;
 }
 
+/* Campo de carcaça do formulário de produto: só aparece quando a categoria é Carcaça */
+#carcacaProdutoCampo[hidden] {
+  display: none;
+}
+
 .carcaca-valor-total output {
   display: flex;
   align-items: center;
