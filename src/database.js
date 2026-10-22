@@ -18,6 +18,17 @@ function boolEnv(name, fallback) {
   return ['1', 'true', 'yes', 'sim'].includes(String(value).toLowerCase());
 }
 
+function connectionStringFor(database) {
+  const base = String(process.env.DB_CONNECTION_STRING || '').trim();
+  if (!base) return '';
+  if (!database) return base;
+  const destino = `Database=${database}`;
+  if (/;\s*Database\s*=/i.test(base) || /^\s*Database\s*=/i.test(base)) {
+    return base.replace(/(^|;)(\s*)Database\s*=\s*[^;]*/i, `$1$2${destino}`);
+  }
+  return base.endsWith(';') ? `${base}${destino};` : `${base};${destino};`;
+}
+
 function configFor(database) {
   const config = {
     server: process.env.DB_SERVER || 'localhost',
@@ -34,9 +45,29 @@ function configFor(database) {
   if (process.env.DB_PORT) config.port = Number(process.env.DB_PORT);
   if (process.env.DB_INSTANCE) config.options.instanceName = process.env.DB_INSTANCE;
 
+  // Connection string completa (opcional). Necessária, por exemplo, para LocalDB,
+  // que o driver msnodesqlv8 não alcança quando server/port são montados por partes.
+  const connectionString = connectionStringFor(database);
+  if (connectionString) {
+    config.connectionString = connectionString;
+    if (authMode === 'windows') {
+      config.driver = process.env.DB_ODBC_DRIVER || 'ODBC Driver 18 for SQL Server';
+    }
+    return config;
+  }
+
   if (authMode === 'windows') {
     config.driver = process.env.DB_ODBC_DRIVER || 'ODBC Driver 18 for SQL Server';
     config.options.trustedConnection = true;
+    // O mssql (msnodesqlv8) não repassa trustServerCertificate para a connection string do
+    // ODBC. Sem isso, com DB_ENCRYPT=true o Driver 18 recusa o certificado autoassinado do
+    // SQL Server. Acrescentamos o parâmetro na string antes de abrir a conexão.
+    config.beforeConnect = (connConfig) => {
+      if (!connConfig.conn_str || /TrustServerCertificate\s*=/i.test(connConfig.conn_str)) return;
+      connConfig.conn_str = `${connConfig.conn_str};TrustServerCertificate=${
+        boolEnv('DB_TRUST_SERVER_CERT', true) ? 'Yes' : 'No'
+      }`;
+    };
   } else {
     config.user = process.env.DB_USER;
     config.password = process.env.DB_PASSWORD;

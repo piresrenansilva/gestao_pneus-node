@@ -44,12 +44,9 @@ const FORMS = {
   produtos: () => [
     field("produtoId", "Código do produto", "text"), field("nome", "Nome", "text", "required"),
     field("categoria", "Categoria", "select"),
-<<<<<<< HEAD
-=======
     `<label class="full" id="carcacaProdutoCampo" hidden>Carcaça (origem da medida e do custo)
       <select id="carcacaProduto"></select>
     </label>`,
->>>>>>> 074cf4aa4d170c5a1b3dc05e0355d81743c2337b
     field("medida", "Medida", "text"),
     field("unidade", "Unidade (ex.: un, pneu)", "text"), field("preco", "Preço de venda", "text", "required class='preco-mask'"),
     field("custo", "Custo unitário", "text", "required class='preco-mask'"),
@@ -454,22 +451,15 @@ function openForm(kind, row) {
     }
   } else if (getField(form, "data")) getField(form, "data").value = today();
   if (kind === "produtos") {
-<<<<<<< HEAD
-    // Preserva no select categorias antigas diferentes de Revenda/Carcaça.
-    const categoriaSel = form.querySelector('select[name="categoria"]');
-=======
     const categoriaSel = form.querySelector('select[name="categoria"]');
     const carcacaCampo = document.getElementById("carcacaProdutoCampo");
     const carcacaSel = document.getElementById("carcacaProduto");
     // Preserva no select categorias antigas diferentes de Revenda/Carcaça.
->>>>>>> 074cf4aa4d170c5a1b3dc05e0355d81743c2337b
     const categoriaAtual = String(row?.categoria || "").trim();
     if (categoriaSel && categoriaAtual && ![...categoriaSel.options].some((option) => option.value.toLocaleLowerCase("pt-BR") === categoriaAtual.toLocaleLowerCase("pt-BR"))) {
       categoriaSel.add(new Option(categoriaAtual, categoriaAtual), 0);
     }
     if (categoriaSel && categoriaAtual) categoriaSel.value = categoriaAtual;
-<<<<<<< HEAD
-=======
     // Lista as carcaças cadastradas: medida · dono · quantidade · valor unitário · status.
     if (carcacaSel) {
       const carcacas = [...db.carcacas].sort((a, b) => String(a.medida || "").localeCompare(String(b.medida || ""), "pt-BR"));
@@ -495,7 +485,6 @@ function openForm(kind, row) {
       if (custoEl) custoEl.value = (Number(carcaca.valorUnitario) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     });
     atualizarCampoCarcaca();
->>>>>>> 074cf4aa4d170c5a1b3dc05e0355d81743c2337b
   }
   if (kind === "cargas") {
     const vendaSelect = getField(form, "pedidoId");

@@ -1258,7 +1258,6 @@ label.full,
   grid-column: 1 / -1;
 }
 
-<<<<<<< HEAD
 /* Apontamento de carcaças: formulário à esquerda, lista ao lado (popup largo) */
 .modal.modal-largo {
   width: min(1160px, 96vw);
@@ -1451,11 +1450,11 @@ label.full,
 .ordem-carcaca-itens td {
   padding: 6px 8px;
   text-align: left;
-=======
+}
+
 /* Campo de carcaça do formulário de produto: só aparece quando a categoria é Carcaça */
 #carcacaProdutoCampo[hidden] {
   display: none;
->>>>>>> 074cf4aa4d170c5a1b3dc05e0355d81743c2337b
 }
 
 .carcaca-valor-total output {
